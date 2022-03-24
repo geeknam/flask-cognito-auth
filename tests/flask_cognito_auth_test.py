@@ -101,10 +101,14 @@ def test_cognito_session(app):
                        groups=['mygroup1', 'mygroup2'],
                        email='myemail@domain.com',
                        expires=datetime_now,
-                       refresh_token="mysupersecretrefreshtoken")
+                       refresh_token="mysupersecretrefreshtoken",
+                       access_token="mysupersecretaccesstoken",
+                       roles=["assumerole1", "assumerole2"])
         assert session['username'] == "myusername"
         assert session['id'] == "myuserid"
         assert session['groups'] == ['mygroup1', 'mygroup2']
         assert session['email'] == "myemail@domain.com"
         assert session['expires'] == datetime_now
         assert session['refresh_token'] == "mysupersecretrefreshtoken"
+        assert session['access_token'] == "mysupersecretaccesstoken"
+        assert session['roles'] == ["assumerole1", "assumerole2"]
