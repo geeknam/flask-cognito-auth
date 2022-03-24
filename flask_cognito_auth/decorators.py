@@ -133,7 +133,7 @@ def callback_handler(fn):
                     profiles = profiles.replace("]", "")
                     profiles = profiles.split(",")
                     for profile in profiles:
-                        groups.append(profile)
+                        groups.append(profile.strip())
 
                 roles = []
                 # Check if claim has preferred_role then set it.
