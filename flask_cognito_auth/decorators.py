@@ -54,6 +54,8 @@ def callback_handler(fn):
         * email
         * expires
         * refresh_token
+        * access_token
+        * roles (List of AWS Cognito Assume roles)
     Use this decorator on the redirect endpoint on your application.
     """
     @wraps(fn)
@@ -121,16 +123,36 @@ def callback_handler(fn):
                 if not email and 'email' in id_token:
                     email = id_token["email"]
 
-                groups = None
+                groups = []
                 if "cognito:groups" in id_token:
                     groups = id_token['cognito:groups']
+
+                if "profile" in id_token:
+                    profiles = id_token["profile"]
+                    profiles = profiles.replace("[", "")
+                    profiles = profiles.replace("]", "")
+                    profiles = profiles.split(",")
+                    for profile in profiles:
+                        groups.append(profile)
+
+                roles = []
+                # Check if claim has preferred_role then set it.
+                if 'cognito:preferred_role' in id_token:
+                    roles.append(id_token['cognito:preferred_role'])
+
+                # If preferred_role is not part of claim and list of
+                # assume roles part of claim, then set it.
+                if 'cognito:roles' in id_token and not roles:
+                    roles = id_token['cognito:roles']
 
                 update_session(username=username,
                                id=id_token["sub"],
                                groups=groups,
                                email=email,
                                expires=id_token["exp"],
-                               refresh_token=response.json()["refresh_token"])
+                               refresh_token=response.json()["refresh_token"],
+                               access_token=response.json()["access_token"],
+                               roles=roles)
         if not auth_success:
             error_uri = config.redirect_error_uri
             if error_uri:
@@ -143,9 +165,16 @@ def callback_handler(fn):
     return wrapper
 
 
-def update_session(username: str, id, groups, email: str, expires, refresh_token):
+def update_session(username: str,
+                   id,
+                   groups,
+                   email: str,
+                   expires,
+                   refresh_token,
+                   access_token,
+                   roles):
     """
-    Method to update the Flase Session object with the informations after
+    Method to update the Flask Session object with the informations after
     successfull login.
     :param username (str):      AWS Cognito authenticated user.
     :param id (str):            ID of AWS Cognito authenticated user.
@@ -154,6 +183,8 @@ def update_session(username: str, id, groups, email: str, expires, refresh_token
     :param email (str):         AWS Cognito email if of authenticated user.
     :param expires (str):       AWS Cognito session timeout.
     :param refresh_token (str): JWT refresh token received in respose.
+    :param access_token (str):  JWT access token received in respose.
+    :param roles (list):        List of AWS Assume roles.
     """
     session['username'] = username
     session['id'] = id
@@ -161,6 +192,9 @@ def update_session(username: str, id, groups, email: str, expires, refresh_token
     session['email'] = email
     session['expires'] = expires
     session['refresh_token'] = refresh_token
+    session['access_token'] = access_token
+    session['roles'] = roles
+    session.modified = True
 
 
 def verify(token: str, access_token: str = None):
@@ -198,6 +232,8 @@ def logout_handler(fn):
         * email
         * expires
         * refresh_token
+        * access_token
+        * roles
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -206,7 +242,9 @@ def logout_handler(fn):
                        groups=None,
                        email=None,
                        expires=None,
-                       refresh_token=None)
+                       refresh_token=None,
+                       access_token=None,
+                       roles=None)
         logger.info(
             "AWS Cognito Login, redirecting to AWS Cognito for logout and terminating sessions")
 
