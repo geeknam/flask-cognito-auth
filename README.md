@@ -13,14 +13,18 @@ This extension requires to enable "Enabled Identity Providers" in Appllication c
 </br>
 
 ## SAML Assertion settings  (OPTIONAL)
-If SAML provider is set then below SAML assertions is requested to set
+If SAML provider is set then optionally SAML assertion can be set and
+reterieved post authentication.</br>
+These assertions are reterived under Session object under key "saml_assertions".
 
+
+#### Example
 ![SAML Assertion](images/saml-assertion.png)
-Notes:
 
-    * Replace "Email" with exact name of provided in SAML assertion by IDP
-    * Replace "MemberOf" with the set of groups provided in SAML assertion by IDP.
-      These groups will be returned as "groups" key in Flask Session variable.
+    * Replace "Email" with the key provided in SAML assertions sent by IDP and to be reterived as Email key.
+    * Replace "MemberOf" with the key provided in SAML assertions sent by IDP and to be reterived as profile key.
+    * Add as many assertions required post authentication.
+
 
 ```bash
 pip install flask-cognito-auth

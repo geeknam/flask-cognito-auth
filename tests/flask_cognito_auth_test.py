@@ -103,7 +103,9 @@ def test_cognito_session(app):
                        expires=datetime_now,
                        refresh_token="mysupersecretrefreshtoken",
                        access_token="mysupersecretaccesstoken",
-                       roles=["assumerole1", "assumerole2"])
+                       roles=["assumerole1", "assumerole2"],
+                       provider_type="SAML",
+                       saml_assertions=[{"profile": ["g1", "g2"]}])
         assert session['username'] == "myusername"
         assert session['id'] == "myuserid"
         assert session['groups'] == ['mygroup1', 'mygroup2']
@@ -112,3 +114,6 @@ def test_cognito_session(app):
         assert session['refresh_token'] == "mysupersecretrefreshtoken"
         assert session['access_token'] == "mysupersecretaccesstoken"
         assert session['roles'] == ["assumerole1", "assumerole2"]
+        assert session['roles'] == ["assumerole1", "assumerole2"]
+        assert session['provider_type'] == "SAML"
+        assert session['saml_assertions'] == [{"profile": ["g1", "g2"]}]

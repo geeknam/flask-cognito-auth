@@ -56,6 +56,7 @@ def callback_handler(fn):
         * refresh_token
         * access_token
         * roles (List of AWS Cognito Assume roles)
+        * All SAML assertions.
     Use this decorator on the redirect endpoint on your application.
     """
     @wraps(fn)
@@ -101,22 +102,22 @@ def callback_handler(fn):
 
                 username = None
                 email = None
+                provider_type = "cognito"
                 if "identities" in id_token:
                     logger.info(
                         "Identities are present in authentication token. Will use that as priority.")
 
                     for identity in id_token['identities']:
+                        if 'userId' in identity and not email:
+                            email = identity['userId']
+                        if "providerType" in identity and "cognito" in provider_type:
+                            provider_type = identity["providerType"]
+
                         if 'primary' in identity and identity['primary']:
                             if 'userId' in identity:
-                                email = username = identity['userId']
-
-                    if not username:
-                        logger.info(
-                            "Primary identifier not present. Will look for very first occurance.")
-                        if len(id_token['identities']):
-                            identity = id_token['identities'][0]
-                            if 'userId' in identity:
-                                email = username = identity['userId']
+                                email = identity['userId']
+                            if "providerType" in identity:
+                                provider_type = identity["providerType"]
 
                 if not username:
                     username = id_token["cognito:username"]
@@ -126,14 +127,6 @@ def callback_handler(fn):
                 groups = []
                 if "cognito:groups" in id_token:
                     groups = id_token['cognito:groups']
-
-                if "profile" in id_token:
-                    profiles = id_token["profile"]
-                    profiles = profiles.replace("[", "")
-                    profiles = profiles.replace("]", "")
-                    profiles = profiles.split(",")
-                    for profile in profiles:
-                        groups.append(profile.strip())
 
                 roles = []
                 # Check if claim has preferred_role then set it.
@@ -145,6 +138,34 @@ def callback_handler(fn):
                 if 'cognito:roles' in id_token and not roles:
                     roles = id_token['cognito:roles']
 
+                skip_tokens = ["cognito:preferred_role",
+                               "cognito:roles",
+                               "cognito:username",
+                               "cognito:groups",
+                               "email",
+                               "identities",
+                               "at_hash",
+                               "sub",
+                               "email_verified",
+                               "iss",
+                               "nonce",
+                               "aud",
+                               "token_use",
+                               "auth_time",
+                               "iat",
+                               "exp"]
+
+                saml_assertions = []
+                for token, val in id_token.items():
+                    if token not in skip_tokens:
+                        token_vals = val.replace("[", "")
+                        token_vals = token_vals.replace("]", "")
+                        token_vals = token_vals.split(",")
+                        vals = []
+                        for token_val in token_vals:
+                            vals.append(token_val.strip())
+                        saml_assertions.append({token: vals})
+
                 update_session(username=username,
                                id=id_token["sub"],
                                groups=groups,
@@ -152,14 +173,16 @@ def callback_handler(fn):
                                expires=id_token["exp"],
                                refresh_token=response.json()["refresh_token"],
                                access_token=response.json()["access_token"],
-                               roles=roles)
+                               roles=roles,
+                               provider_type=provider_type,
+                               saml_assertions=saml_assertions)
         if not auth_success:
             error_uri = config.redirect_error_uri
             if error_uri:
                 resp = redirect(url_for(error_uri))
                 return resp
             else:
-                msg = f"Somthing went wrong during authentication"
+                msg = f"Something went wrong during authentication"
                 return json.dumps({'Error': msg}), 500
         return fn(*args, **kwargs)
     return wrapper
@@ -172,19 +195,24 @@ def update_session(username: str,
                    expires,
                    refresh_token,
                    access_token,
-                   roles):
+                   roles,
+                   provider_type,
+                   saml_assertions):
     """
     Method to update the Flask Session object with the informations after
     successfull login.
-    :param username (str):      AWS Cognito authenticated user.
-    :param id (str):            ID of AWS Cognito authenticated user.
-    :param groups (list):       List of AWS Cognito groups if authenticated
-                                user is subscribed.
-    :param email (str):         AWS Cognito email if of authenticated user.
-    :param expires (str):       AWS Cognito session timeout.
-    :param refresh_token (str): JWT refresh token received in respose.
-    :param access_token (str):  JWT access token received in respose.
-    :param roles (list):        List of AWS Assume roles.
+    :param username (str):          AWS Cognito authenticated user.
+    :param id (str):                ID of AWS Cognito authenticated user.
+    :param groups (list):           List of AWS Cognito groups if authenticated
+                                    user is subscribed.
+    :param email (str):             AWS Cognito email if of authenticated user.
+    :param expires (str):           AWS Cognito session timeout.
+    :param refresh_token (str):     JWT refresh token received in respose.
+    :param access_token (str):      JWT access token received in respose.
+    :param roles (list):            List of AWS Assume roles.
+    :param provider_type (str):     Default is "cognito". If authenticated
+                                    using SAML provider then it will be "SAML"
+    :param saml_assertions (list):  List of all SAML assertions.
     """
     session['username'] = username
     session['id'] = id
@@ -194,6 +222,8 @@ def update_session(username: str,
     session['refresh_token'] = refresh_token
     session['access_token'] = access_token
     session['roles'] = roles
+    session['provider_type'] = provider_type
+    session['saml_assertions'] = saml_assertions
     session.modified = True
 
 
@@ -234,17 +264,21 @@ def logout_handler(fn):
         * refresh_token
         * access_token
         * roles
+        * provider_type
+        * saml_assertions
     """
     @wraps(fn)
     def wrapper(*args, **kwargs):
         update_session(username=None,
                        id=None,
-                       groups=None,
+                       groups=[],
                        email=None,
                        expires=None,
                        refresh_token=None,
                        access_token=None,
-                       roles=None)
+                       roles=[],
+                       provider_type=None,
+                       saml_assertions=[])
         logger.info(
             "AWS Cognito Login, redirecting to AWS Cognito for logout and terminating sessions")
 
