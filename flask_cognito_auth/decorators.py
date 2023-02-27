@@ -103,7 +103,7 @@ def callback_handler(fn):
                 username = None
                 email = None
                 provider_type = "cognito"
-                if "identities" in id_token:
+                if "BYPASS_THIS_BLOCK" in id_token:
                     logger.info(
                         "Identities are present in authentication token. Will use that as priority.")
 
